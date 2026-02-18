@@ -1261,10 +1261,9 @@ async def show_top(message: types.Message, order_field: str, title: str):
         kb = []
         nav_buttons = []
         if page > 1:
-            nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"top_{order_field}_{page-1}"))
+                        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"top:{order_field}:{page-1}"))
         if offset + ITEMS_PER_PAGE < total:
-            nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"top_{order_field}_{page+1}"))
-        if nav_buttons:
+            nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"top:{order_field}:{page+1}"))
             kb.append(nav_buttons)
         if kb:
             await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
@@ -1275,8 +1274,9 @@ async def show_top(message: types.Message, order_field: str, title: str):
         await message.answer("❌ Ошибка загрузки топа.")
 
 @dp.callback_query_handler(lambda c: c.data.startswith("top_"))
+@dp.callback_query_handler(lambda c: c.data.startswith("top:"))
 async def top_page_callback(callback: types.CallbackQuery):
-    parts = callback.data.split("_")
+    parts = callback.data.split(":")
     field = parts[1]
     page = int(parts[2])
     titles = {
