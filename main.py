@@ -1684,7 +1684,7 @@ async def guess_bet_number(message: types.Message, state: FSMContext):
             await conn.execute("UPDATE users SET guess_wins = guess_wins + 1 WHERE user_id=$1", user_id)
         phrase = random.choice(GUESS_WIN_PHRASES).format(secret=secret, profit=profit, rep=rep_reward)
     else:
-        await update_user_balance(user_id, -amount)
+                        await update_user_balance(user_id, -amount)
         async with db_pool.acquire() as conn:
             await conn.execute("UPDATE users SET guess_losses = guess_losses + 1 WHERE user_id=$1", user_id)
         phrase = random.choice(GUESS_LOSE_PHRASES).format(secret=secret, loss=amount)
