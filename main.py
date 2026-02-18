@@ -248,6 +248,8 @@ async def init_db():
                 created_at TEXT
             )
         ''')
+                # Добавляем поле created_at, если его нет
+        await conn.execute('ALTER TABLE promocodes ADD COLUMN IF NOT EXISTS created_at TEXT')
 
         # Активации промокодов
         await conn.execute('''
