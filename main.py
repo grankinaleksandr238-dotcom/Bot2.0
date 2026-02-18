@@ -545,6 +545,40 @@ async def notify_chats(message_text: str, importance: str = 'info'):
             continue
         await safe_send_chat(chat_id, message_text)
 
+# ===== ВСТАВЬ СЮДА =====
+import string
+
+def generate_game_id():
+    """Генерирует уникальный код комнаты из 6 символов"""
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+def calculate_hand_value(cards):
+    """Вычисляет сумму очков для списка карт (карты в формате '10♠', 'A♥' и т.д.)"""
+    value = 0
+    aces = 0
+    for card in cards:
+        rank = card[:-1]
+        if rank in ['J', 'Q', 'K']:
+            value += 10
+        elif rank == 'A':
+            aces += 1
+            value += 11
+        else:
+            value += int(rank)
+    while value > 21 and aces:
+        value -= 10
+        aces -= 1
+    return value
+
+def create_deck():
+    """Создаёт перемешанную колоду из 52 карт"""
+    suits = ['♠', '♥', '♦', '♣']
+    ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+    deck = [f"{rank}{suit}" for suit in suits for rank in ranks]
+    random.shuffle(deck)
+    return deck
+# ===== КОНЕЦ ВСТАВКИ =====
+
 # ===== СОСТОЯНИЯ FSM =====
 class CreateGiveaway(StatesGroup):
     prize = State()
