@@ -717,13 +717,7 @@ def theft_choice_keyboard():
         [KeyboardButton(text="◀️ Назад")]
     ], resize_keyboard=True)
 
-def games_keyboard():
-    return ReplyKeyboardMarkup(keyboard=[
-        [KeyboardButton(text="🎲 Кости"), KeyboardButton(text="🔢 Угадай число")],
-        [KeyboardButton(text="👥 Комнатная игра 21")],
-        [KeyboardButton(text="◀️ Назад")]
-    ], resize_keyboard=True)
-
+# ===== НОВЫЕ КЛАВИАТУРЫ ДЛЯ МУЛЬТИПЛЕЕРА =====
 def room_menu_keyboard():
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="📋 Список комнат")],
@@ -743,7 +737,12 @@ def room_action_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🎯 Ещё", callback_data="room_hit"),
          InlineKeyboardButton(text="🛑 Хватит", callback_data="room_stand")],
-        [InlineKeyboardButton(text="💬 Написать в чат", callback_data="room_chat")]
+        [InlineKeyboardButton(text="🏳️ Сдаться", callback_data="room_surrender")]
+    ])
+
+def leave_room_keyboard(game_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚪 Выйти из комнаты", callback_data=f"leave_room_{game_id}")]
     ])
 
 def admin_main_keyboard(is_super):
