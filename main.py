@@ -2299,6 +2299,96 @@ async def join_room_callback(callback: types.CallbackQuery):
             await callback.answer("❌ Ты уже в этой комнате.", show_alert=True)
             return
         balance = await get_user_balance(user_id)
+ # ===== МУЛЬТИПЛЕЕРНАЯ ИГРА "21" (ФИНАЛЬНАЯ, С ЧАТОМ) =====
+
+# Хранилище активных комнат (для быстрого доступа)
+active_rooms = {}
+
+@dp.message_handler(lambda message: message.text == "👥 Комнатная игра 21")
+async def multiplayer_main(message: types.Message):
+    if message.chat.type != 'private':
+        return
+    user_id = message.from_user.id
+    if await is_banned(user_id) and not await is_admin(user_id):
+        return
+    ok, not_subscribed = await check_subscription(user_id)
+    if not ok:
+        await message.answer("❗️ Сначала подпишись на каналы.", reply_markup=subscription_inline(not_subscribed))
+        return
+    await message.answer("🎮 Мультиплеер 21 – выбери действие:", reply_markup=room_menu_keyboard())
+
+@dp.message_handler(lambda message: message.text == "ℹ️ Правила игры")
+async def game_rules(message: types.Message):
+    rules = """
+🎯 **Правила игры "21" (мультиплеер):**
+• Каждый игрок делает ставку (от 3 монет).
+• Цель – набрать сумму очков как можно ближе к 21, но не больше.
+• Карты: 2–10 по номиналу, J/Q/K – 10 очков, Туз – 11 или 1.
+• Игроки ходят по очереди: можно взять ещё карту ("Ещё") или остановиться ("Хватит").
+• Дилер добирает до 17 очков.
+• Победитель забирает банк за вычетом комиссии (1 монета с игрока).
+• В случае ничьей ставка возвращается.
+• Создатель комнаты может начать игру при наличии от 2 до 5 игроков.
+• До начала игры можно выйти без потери монет.
+• Во время игры выход или сдача приводят к проигрышу ставки.
+    """
+    await message.answer(rules)
+
+@dp.message_handler(lambda message: message.text == "🏆 Топ игроков")
+async def game_top(message: types.Message):
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("SELECT first_name, game_wins FROM users WHERE game_wins > 0 ORDER BY game_wins DESC LIMIT 10")
+    if not rows:
+        await message.answer("🏆 Топ пока пуст.")
+        return
+    text = "🏆 **Лучшие игроки в 21:**\n\n"
+    for i, row in enumerate(rows, 1):
+        text += f"{i}. {row['first_name']} – {row['game_wins']} побед\n"
+    await message.answer(text)
+
+@dp.message_handler(lambda message: message.text == "📋 Список комнат")
+async def list_rooms(message: types.Message):
+    async with db_pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT game_id, host_id, max_players, bet_amount, 
+                   (SELECT COUNT(*) FROM game_players WHERE game_id = g.game_id) as player_count
+            FROM multiplayer_games g
+            WHERE status = 'waiting'
+            ORDER BY created_at
+        """)
+    if not rows:
+        await message.answer("📭 Нет открытых комнат. Создай свою!")
+        return
+    text = "📋 **Открытые комнаты:**\n\n"
+    kb = []
+    for row in rows:
+        game_id = row['game_id']
+        max_pl = row['max_players']
+        cur_pl = row['player_count']
+        bet = row['bet_amount']
+        text += f"🆔 `{game_id}` | {cur_pl}/{max_pl} игр. | 💰 {bet} монет\n"
+        kb.append([InlineKeyboardButton(text=f"Присоединиться к {game_id}", callback_data=f"join_room_{game_id}")])
+    await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+@dp.callback_query_handler(lambda c: c.data.startswith("join_room_"))
+async def join_room_callback(callback: types.CallbackQuery):
+    game_id = callback.data.replace("join_room_", "")
+    user_id = callback.from_user.id
+    username = callback.from_user.username or "NoName"
+    async with db_pool.acquire() as conn:
+        game = await conn.fetchrow("SELECT * FROM multiplayer_games WHERE game_id=$1 AND status='waiting'", game_id)
+        if not game:
+            await callback.answer("❌ Комната не найдена или игра уже началась.", show_alert=True)
+            return
+        players = await conn.fetch("SELECT user_id FROM game_players WHERE game_id=$1", game_id)
+        if len(players) >= game['max_players']:
+            await callback.answer("❌ Комната уже заполнена.", show_alert=True)
+            return
+        existing = await conn.fetchval("SELECT 1 FROM game_players WHERE game_id=$1 AND user_id=$2", game_id, user_id)
+        if existing:
+            await callback.answer("❌ Ты уже в этой комнате.", show_alert=True)
+            return
+        balance = await get_user_balance(user_id)
         bet = game['bet_amount']
         if balance < bet:
             await callback.answer(f"❌ Недостаточно монет. Нужно {bet}", show_alert=True)
@@ -2316,6 +2406,11 @@ async def join_room_callback(callback: types.CallbackQuery):
     await callback.message.answer("Ты в комнате. Можешь выйти в любой момент до начала игры.", reply_markup=leave_room_keyboard(game_id))
     await callback.answer()
 
+def leave_room_keyboard(game_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚪 Выйти из комнаты", callback_data=f"leave_room_{game_id}")]
+    ])
+
 @dp.callback_query_handler(lambda c: c.data.startswith("leave_room_"))
 async def leave_room_callback(callback: types.CallbackQuery):
     game_id = callback.data.replace("leave_room_", "")
@@ -2325,9 +2420,8 @@ async def leave_room_callback(callback: types.CallbackQuery):
         if not game:
             await callback.answer("❌ Комната не найдена.", show_alert=True)
             return
-        bet = game['bet_amount']
         if game['status'] == 'waiting':
-            # Выход до начала игры – просто удаляем игрока, ставка не списывалась
+            # Выход до начала игры – просто удаляем игрока (ставка не резервировалась)
             await conn.execute("DELETE FROM game_players WHERE game_id=$1 AND user_id=$2", game_id, user_id)
             # Если это был создатель, передаём права следующему
             if game['host_id'] == user_id:
@@ -2338,18 +2432,17 @@ async def leave_room_callback(callback: types.CallbackQuery):
                 else:
                     # Комната пуста – удаляем
                     await conn.execute("DELETE FROM multiplayer_games WHERE game_id=$1", game_id)
-            await callback.message.edit_text("❌ Ты покинул комнату. Ставка возвращена.")
+            await callback.message.edit_text("❌ Ты покинул комнату.")
         else:
             # Выход во время игры – штраф (списываем ставку)
+            bet = game['bet_amount']
             await update_user_balance(user_id, -bet)
             await conn.execute("UPDATE game_players SET stopped=TRUE WHERE game_id=$1 AND user_id=$2", game_id, user_id)
             await callback.message.edit_text(f"❌ Ты покинул игру и потерял {bet} монет.")
-            # Проверяем, не закончилась ли игра
-            players_left = await conn.fetchval("SELECT COUNT(*) FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped=FALSE", game_id)
-            if players_left == 0:
-                # Все вышли – удаляем комнату
-                await conn.execute("DELETE FROM game_players WHERE game_id=$1", game_id)
-                await conn.execute("DELETE FROM multiplayer_games WHERE game_id=$1", game_id)
+            # Проверяем, остались ли активные игроки
+            active = await conn.fetchval("SELECT COUNT(*) FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped = FALSE", game_id)
+            if active == 0:
+                await dealer_turn(game_id)
     await callback.answer()
 
 @dp.message_handler(lambda message: message.text == "🎮 Создать комнату")
@@ -2423,6 +2516,12 @@ async def create_room_bet(message: types.Message, state: FSMContext):
         reply_markup=room_control_keyboard(game_id)
     )
 
+def room_control_keyboard(game_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 Начать игру", callback_data=f"start_game_{game_id}")],
+        [InlineKeyboardButton(text="❌ Закрыть комнату", callback_data=f"close_room_{game_id}")]
+    ])
+
 @dp.callback_query_handler(lambda c: c.data.startswith("close_room_"))
 async def close_room_callback(callback: types.CallbackQuery):
     game_id = callback.data.replace("close_room_", "")
@@ -2435,10 +2534,10 @@ async def close_room_callback(callback: types.CallbackQuery):
         if game['host_id'] != user_id:
             await callback.answer("❌ Только создатель может закрыть комнату.", show_alert=True)
             return
-        # Удаляем игроков и комнату (ставки не возвращаются, так как они не списывались)
+        # Удаляем игроков и комнату
         await conn.execute("DELETE FROM game_players WHERE game_id=$1", game_id)
         await conn.execute("DELETE FROM multiplayer_games WHERE game_id=$1", game_id)
-    await callback.message.edit_text("🏁 Комната закрыта. Ставки возвращены.")  # текст можно оставить для информирования
+    await callback.message.edit_text("🏁 Комната закрыта.")
     await callback.answer()
 
 @dp.callback_query_handler(lambda c: c.data.startswith("start_game_"))
@@ -2486,17 +2585,22 @@ async def process_next_turn(game_id: str, player_index: int):
             await dealer_turn(game_id)
             return
         current_player = players[player_index]
+        # Если игрок уже остановился (stopped), пропускаем его
+        if current_player['stopped']:
+            await process_next_turn(game_id, player_index + 1)
+            return
         cards = current_player['cards'].split(',') if current_player['cards'] else []
         value = calculate_hand_value(cards)
         # Сохраняем контекст
         async with dp.current_state(chat=current_player['user_id'], user=current_player['user_id']).proxy() as data:
             data['game_id'] = game_id
             data['player_index'] = player_index
-        # Клавиатура с действиями
+        # Клавиатура с действиями и чатом
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎯 Ещё", callback_data="room_hit"),
              InlineKeyboardButton(text="🛑 Хватит", callback_data="room_stand")],
-            [InlineKeyboardButton(text="🏳️ Сдаться", callback_data="room_surrender")]
+            [InlineKeyboardButton(text="🏳️ Сдаться", callback_data="room_surrender")],
+            [InlineKeyboardButton(text="💬 Написать в чат", callback_data="room_chat")]
         ])
         await safe_send_message(
             current_player['user_id'],
@@ -2504,7 +2608,7 @@ async def process_next_turn(game_id: str, player_index: int):
             reply_markup=kb
         )
 
-@dp.callback_query_handler(lambda c: c.data in ["room_hit", "room_stand", "room_surrender"])
+@dp.callback_query_handler(lambda c: c.data in ["room_hit", "room_stand", "room_surrender", "room_chat"])
 async def room_action_callback(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     async with dp.current_state(chat=user_id, user=user_id).proxy() as data:
@@ -2532,7 +2636,12 @@ async def room_action_callback(callback: types.CallbackQuery):
                 await callback.answer("Колода кончилась, передаём ход...", show_alert=True)
                 await conn.execute("UPDATE game_players SET stopped=TRUE WHERE game_id=$1 AND user_id=$2", game_id, user_id)
                 await callback.answer()
-                await process_next_turn(game_id, player_index + 1)
+                # Проверка на окончание
+                active = await conn.fetchval("SELECT COUNT(*) FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped = FALSE", game_id)
+                if active == 0:
+                    await dealer_turn(game_id)
+                else:
+                    await process_next_turn(game_id, player_index + 1)
                 return
             new_card = deck.pop()
             cards.append(new_card)
@@ -2546,12 +2655,18 @@ async def room_action_callback(callback: types.CallbackQuery):
                 await conn.execute("UPDATE game_players SET stopped=TRUE WHERE game_id=$1 AND user_id=$2", game_id, user_id)
                 await callback.message.edit_text(f"💥 Перебор! Твои карты: {', '.join(cards)} (очков: {value})\nТы проиграл свою ставку.")
                 await callback.answer()
-                await process_next_turn(game_id, player_index + 1)
+                active = await conn.fetchval("SELECT COUNT(*) FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped = FALSE", game_id)
+                if active == 0:
+                    await dealer_turn(game_id)
+                else:
+                    await process_next_turn(game_id, player_index + 1)
+                return
             else:
                 kb = InlineKeyboardMarkup(inline_keyboard=[
                     [InlineKeyboardButton(text="🎯 Ещё", callback_data="room_hit"),
                      InlineKeyboardButton(text="🛑 Хватит", callback_data="room_stand")],
-                    [InlineKeyboardButton(text="🏳️ Сдаться", callback_data="room_surrender")]
+                    [InlineKeyboardButton(text="🏳️ Сдаться", callback_data="room_surrender")],
+                    [InlineKeyboardButton(text="💬 Написать в чат", callback_data="room_chat")]
                 ])
                 await callback.message.edit_text(
                     f"Твои карты: {', '.join(cards)} (очков: {value})\nВыбери действие:",
@@ -2564,7 +2679,11 @@ async def room_action_callback(callback: types.CallbackQuery):
             await conn.execute("UPDATE game_players SET stopped=TRUE WHERE game_id=$1 AND user_id=$2", game_id, user_id)
             await callback.message.edit_text(f"✅ Ты остановился на {value} очках.")
             await callback.answer()
-            await process_next_turn(game_id, player_index + 1)
+            active = await conn.fetchval("SELECT COUNT(*) FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped = FALSE", game_id)
+            if active == 0:
+                await dealer_turn(game_id)
+            else:
+                await process_next_turn(game_id, player_index + 1)
             return
 
         elif callback.data == "room_surrender":
@@ -2573,8 +2692,38 @@ async def room_action_callback(callback: types.CallbackQuery):
             await conn.execute("UPDATE game_players SET stopped=TRUE WHERE game_id=$1 AND user_id=$2", game_id, user_id)
             await callback.message.edit_text(f"🏳️ Ты сдался и потерял {bet} монет.")
             await callback.answer()
-            await process_next_turn(game_id, player_index + 1)
+            active = await conn.fetchval("SELECT COUNT(*) FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped = FALSE", game_id)
+            if active == 0:
+                await dealer_turn(game_id)
+            else:
+                await process_next_turn(game_id, player_index + 1)
             return
+
+        elif callback.data == "room_chat":
+            await callback.message.answer("Введи сообщение для всех в комнате (или /cancel для отмены):")
+            await RoomChat.message.set()
+            await callback.answer()
+
+@dp.message_handler(state=RoomChat.message)
+async def room_chat_message(message: types.Message, state: FSMContext):
+    if message.text == "/cancel":
+        await state.finish()
+        await message.answer("Отправка отменена.")
+        return
+    user_id = message.from_user.id
+    async with dp.current_state(chat=user_id, user=user_id).proxy() as data:
+        game_id = data.get('game_id')
+    if not game_id:
+        await state.finish()
+        await message.answer("❌ Игра не найдена.")
+        return
+    async with db_pool.acquire() as conn:
+        players = await conn.fetch("SELECT user_id FROM game_players WHERE game_id=$1 AND user_id != 0", game_id)
+        for player in players:
+            if player['user_id'] != user_id:
+                await safe_send_message(player['user_id'], f"💬 {message.from_user.first_name}: {message.text}")
+    await state.finish()
+    await message.answer("✅ Сообщение отправлено всем игрокам в комнате.")
 
 async def dealer_turn(game_id: str):
     async with db_pool.acquire() as conn:
@@ -2600,7 +2749,6 @@ async def dealer_turn(game_id: str):
             await conn.execute("UPDATE multiplayer_games SET deck=$1 WHERE game_id=$2", ','.join(deck), game_id)
         # Принудительный выигрыш дилера (каждая DEALER_WIN_RATE игра)
         dealer_forced_win = (random.randint(1, DEALER_WIN_RATE) == 1)
-        # Выбираем только игроков, которые не остановились и не сдались (stopped = FALSE)
         players = await conn.fetch("SELECT * FROM game_players WHERE game_id=$1 AND user_id != 0 AND stopped = FALSE", game_id)
         bet = game['bet_amount']
         results = []
@@ -2634,8 +2782,7 @@ async def dealer_turn(game_id: str):
                 f"Карты дилера: {dealer_cards_str} (очков: {dealer_value})\n"
                 f"Результат: {res}"
             )
-        # Также уведомляем тех, кто сдался (они уже получили уведомление при сдаче)
-        # Очищаем комнату
+        # Удаляем комнату и игроков
         await conn.execute("DELETE FROM game_players WHERE game_id=$1", game_id)
         await conn.execute("DELETE FROM multiplayer_games WHERE game_id=$1", game_id)
 
