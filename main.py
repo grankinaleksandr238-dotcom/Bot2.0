@@ -2132,17 +2132,18 @@ async def cleanup_confirm(callback: types.CallbackQuery):
         return
 
     async with db_pool.acquire() as conn:
-        promo_deleted = await conn.fetchval(
-            "DELETE FROM promocodes WHERE used_count >= max_uses RETURNING count(*)"
-        )
-        tasks_deleted = await conn.fetchval(
-            "DELETE FROM tasks WHERE active = FALSE RETURNING count(*)"
-        )
+        # Удаляем промокоды
+        promo_result = await conn.execute("DELETE FROM promocodes WHERE used_count >= max_uses")
+        promo_deleted = promo_result.split()[1]  # результат в asyncpg — строка типа "DELETE 5"
+
+        # Удаляем неактивные задания
+        tasks_result = await conn.execute("DELETE FROM tasks WHERE active = FALSE")
+        tasks_deleted = tasks_result.split()[1]
 
     await callback.message.edit_text(
         f"✅ Очистка завершена!\n"
-        f"Удалено промокодов: {promo_deleted or 0}\n"
-        f"Удалено заданий: {tasks_deleted or 0}"
+        f"Удалено промокодов: {promo_deleted}\n"
+        f"Удалено заданий: {tasks_deleted}"
     )
     await callback.answer()
 
