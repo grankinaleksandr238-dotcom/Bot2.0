@@ -321,7 +321,7 @@ async def init_db():
             )
         ''')
 
-        # Выполненные задания
+                # Выполненные задания
         await conn.execute('''
             CREATE TABLE IF NOT EXISTS user_tasks (
                 user_id BIGINT,
@@ -332,6 +332,48 @@ async def init_db():
                 PRIMARY KEY (user_id, task_id)
             )
         ''')
+
+        # Мультиплеерные игры
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS multiplayer_games (
+                game_id TEXT PRIMARY KEY,
+                host_id BIGINT,
+                max_players INTEGER,
+                bet_amount INTEGER,
+                status TEXT DEFAULT 'waiting',
+                deck TEXT,
+                created_at TEXT
+            )
+        ''')
+
+        await conn.execute('''
+            CREATE TABLE IF NOT EXISTS game_players (
+                game_id TEXT,
+                user_id BIGINT,
+                username TEXT,
+                cards TEXT,
+                value INTEGER DEFAULT 0,
+                stopped BOOLEAN DEFAULT FALSE,
+                joined_at TEXT,
+                PRIMARY KEY (game_id, user_id)
+            )
+        ''')
+
+        # Добавляем поле game_wins в users (если нет)
+        await conn.execute('ALTER TABLE users ADD COLUMN IF NOT EXISTS game_wins INTEGER DEFAULT 0')
+
+        # Индексы
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_reputation ON users(reputation DESC)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_total_spent ON users(total_spent DESC)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_purchases_user_id ON purchases(user_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_purchases_status ON purchases(status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_giveaways_status ON giveaways(status)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_promo_activations_user ON promo_activations(user_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_tasks_expires ON user_tasks(expires_at)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_tasks_active ON tasks(active)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id)")
 
         # Индексы
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC)")
