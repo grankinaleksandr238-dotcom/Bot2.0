@@ -1692,7 +1692,7 @@ async def guess_bet_number(message: types.Message, state: FSMContext):
     new_balance = await get_user_balance(user_id)
     new_rep = await get_user_reputation(user_id)
     await message.answer(f"{phrase}\n💰 Баланс: {new_balance}\n⭐️ Репутация: {new_rep}")
-        await state.finish()
+    await state.finish()
 
 # ========== НАЧАЛО БЛОКА МУЛЬТИПЛЕЕРНОЙ ИГРЫ ==========
 # ===== МУЛЬТИПЛЕЕРНАЯ ИГРА "21" (ФИНАЛЬНАЯ ВЕРСИЯ) =====
