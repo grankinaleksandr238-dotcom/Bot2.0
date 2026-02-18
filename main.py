@@ -650,6 +650,7 @@ def admin_main_keyboard(is_super):
         [KeyboardButton(text="🎫 Управление промокодами")],
         [KeyboardButton(text="📋 Управление заданиями")],
         [KeyboardButton(text="⚙️ Настройки игры")],
+        [KeyboardButton(text="🧹 Очистить старые записи")],
         [KeyboardButton(text="📊 Статистика")],
         [KeyboardButton(text="👥 Найти пользователя")],
         [KeyboardButton(text="🛍️ Список покупок")],
