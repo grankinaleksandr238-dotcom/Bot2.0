@@ -720,8 +720,31 @@ def theft_choice_keyboard():
 def games_keyboard():
     return ReplyKeyboardMarkup(keyboard=[
         [KeyboardButton(text="🎲 Кости"), KeyboardButton(text="🔢 Угадай число")],
+        [KeyboardButton(text="👥 Комнатная игра 21")],
         [KeyboardButton(text="◀️ Назад")]
     ], resize_keyboard=True)
+
+def room_menu_keyboard():
+    return ReplyKeyboardMarkup(keyboard=[
+        [KeyboardButton(text="📋 Список комнат")],
+        [KeyboardButton(text="🎮 Создать комнату")],
+        [KeyboardButton(text="ℹ️ Правила игры")],
+        [KeyboardButton(text="🏆 Топ игроков")],
+        [KeyboardButton(text="◀️ Назад в игры")]
+    ], resize_keyboard=True)
+
+def room_control_keyboard(game_id):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🚀 Начать игру", callback_data=f"start_game_{game_id}")],
+        [InlineKeyboardButton(text="❌ Закрыть комнату", callback_data=f"close_room_{game_id}")]
+    ])
+
+def room_action_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🎯 Ещё", callback_data="room_hit"),
+         InlineKeyboardButton(text="🛑 Хватит", callback_data="room_stand")],
+        [InlineKeyboardButton(text="💬 Написать в чат", callback_data="room_chat")]
+    ])
 
 def admin_main_keyboard(is_super):
     buttons = [
