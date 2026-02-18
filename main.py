@@ -3440,7 +3440,7 @@ async def unknown_message(message: types.Message):
         return
     admin_flag = await is_admin(message.from_user.id)
     await message.answer("Я не понимаю эту команду. Используй кнопки меню.", reply_markup=user_main_keyboard(admin_flag))
-=# ===== ТРЕТЬЯ ЧАСТЬ (АДМИНИСТРАТИВНЫЕ ХЕНДЛЕРЫ, ФОНОВЫЕ ЗАДАЧИ, ЗАПУСК) =====
+# ===== ТРЕТЬЯ ЧАСТЬ (АДМИНИСТРАТИВНЫЕ ХЕНДЛЕРЫ, ФОНОВЫЕ ЗАДАЧИ, ЗАПУСК) =====
 
 # ===== АДМИНИСТРАТИВНЫЕ ХЕНДЛЕРЫ =====
 
