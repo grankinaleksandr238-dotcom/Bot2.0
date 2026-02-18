@@ -645,7 +645,13 @@ class TakeTask(StatesGroup):
 
 class DeleteTask(StatesGroup):
     task_id = State()
+class MultiplayerGame(StatesGroup):
+    create_max_players = State()
+    create_bet = State()
+    join_code = State()
 
+class RoomChat(StatesGroup):
+    message = State()
 # ===== КЛАВИАТУРЫ =====
 def subscription_inline(not_subscribed):
     kb = []
