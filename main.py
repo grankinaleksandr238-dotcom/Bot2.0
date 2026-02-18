@@ -2113,7 +2113,48 @@ async def admin_panel(message: types.Message):
         return
     super_admin = await is_super_admin(message.from_user.id)
     await message.answer("Панель администратора:", reply_markup=admin_main_keyboard(super_admin))
+@dp.message_handler(lambda message: message.text == "🧹 Очистить старые записи")
+async def admin_cleanup(message: types.Message):
+    if not await is_super_admin(message.from_user.id):
+        await message.answer("❌ Только суперадмин может это делать.")
+        return
 
+    confirm_kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Да, чистить", callback_data="cleanup_confirm")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="cleanup_cancel")]
+    ])
+    await message.answer("⚠️ Удалить все использованные промокоды и неактивные задания?", reply_markup=confirm_kb)
+
+@dp.callback_query_handler(lambda c: c.data == "cleanup_confirm")
+async def cleanup_confirm(callback: types.CallbackQuery):
+    if not await is_super_admin(callback.from_user.id):
+        await callback.answer("Недостаточно прав", show_alert=True)
+        return
+
+    async with db_pool.acquire() as conn:
+        promo_deleted = await conn.fetchval("""
+            DELETE FROM promocodes 
+            WHERE used_count >= max_uses
+            RETURNING count(*)
+        """)
+
+        tasks_deleted = await conn.fetchval("""
+            DELETE FROM tasks 
+            WHERE active = FALSE
+            RETURNING count(*)
+        """)
+
+    await callback.message.edit_text(
+        f"✅ Очистка завершена!\n"
+        f"Удалено промокодов: {promo_deleted or 0}\n"
+        f"Удалено заданий: {tasks_deleted or 0}"
+    )
+    await callback.answer()
+
+@dp.callback_query_handler(lambda c: c.data == "cleanup_cancel")
+async def cleanup_cancel(callback: types.CallbackQuery):
+    await callback.message.edit_text("❌ Очистка отменена")
+    await callback.answer()
 # ===== УПРАВЛЕНИЕ ЗАДАНИЯМИ =====
 @dp.message_handler(lambda message: message.text == "📋 Управление заданиями")
 async def admin_tasks_menu(message: types.Message):
