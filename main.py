@@ -1528,7 +1528,7 @@ async def bonus_handler(message: types.Message):
         now = datetime.now()
         if last_bonus_str:
             last_bonus = datetime.strptime(last_bonus_str, "%Y-%m-%d %H:%M:%S")
-            if now - last_bonus < timedelta(days=1)):
+            if now - last_bonus < timedelta(days=1):
                 remaining = timedelta(days=1) - (now - last_bonus)
                 hours = remaining.seconds // 3600
                 minutes = (remaining.seconds // 60) % 60
